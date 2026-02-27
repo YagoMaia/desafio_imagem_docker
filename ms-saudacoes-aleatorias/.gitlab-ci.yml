@@ -1,0 +1,82 @@
+default:
+  image: golang:1.24-alpine
+
+stages:
+  - lint
+  - test
+  - release
+
+variables:
+  DOCKER_USER: ozorest84
+  DOCKER_PASS: $DOCKER_PASS
+  SERVICE_NAME: saudacoes-aleatorias
+  DOCKER_IMAGE_NAME: $DOCKER_USER/ms-$SERVICE_NAME
+  DOCKER_REGISTRY: registry.hub.docker.com
+  DOCKER_IMAGE_TAG: 1.0.$CI_PIPELINE_IID
+
+lint-code:
+  stage: lint
+  script:
+    - echo "Linting code..."
+    - go fmt $(go list ./...)
+    - go vet $(go list ./...)
+
+golangci-lint:
+  stage: lint
+  image: golangci/golangci-lint:v2.2-alpine
+  script:
+    - echo "Executando linter no código..."
+    - golangci-lint run --verbose
+
+run-tests:
+  stage: test
+  script:
+    - echo "Rodando testes e gerando report..."
+    - apk add --no-cache build-base gcc
+    - go install gotest.tools/gotestsum@latest
+    - CGO_ENABLED=1 gotestsum --junitfile report.xml --format testname
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+
+build-and-push-image:
+  stage: release
+  tags:
+    - gitlab-org-docker # Certifique-se que este runner suporta modo privilegiado
+  # É recomendado usar uma imagem mais recente, se possível, para ter as últimas versões do buildx
+  image: docker:25.0
+  services:
+    - name: docker:25.0-dind
+      command: ["--experimental"] # Necessário para buildx em algumas configurações
+  variables:
+    # Habilita o driver overlay2 para o dind, geralmente mais estável
+    DOCKER_DRIVER: overlay2
+    # Desativa o TLS, pois estamos nos conectando ao dind no mesmo host
+    DOCKER_TLS_CERTDIR: ""
+    # Define as plataformas alvo
+    PLATFORMS: "linux/amd64,linux/arm64"
+    CACHE_DIR: ".buildx-cache"
+  before_script:
+    # 1. Login no Docker Hub
+    - echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+
+    # 2. Habilita a emulação de outras arquiteturas via QEMU
+    # O buildx usará o QEMU para construir a imagem ARM em um runner AMD64
+    - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+    # 3. Cria e utiliza um novo builder buildx
+    # Isso cria uma instância de builder que pode lidar com múltiplas plataformas
+    - docker buildx create --use --name multi-platform-builder
+    - docker buildx inspect --bootstrap
+
+  script:
+    - echo "Construindo e enviando a imagem multi-plataforma..."
+    - mkdir -p "$CACHE_DIR"
+    - docker buildx build \
+      --platform "$PLATFORMS" \
+      --cache-from "type=local,src=$CACHE_DIR" \
+      --cache-to "type=local,dest=$CACHE_DIR,mode=max" \
+      --tag "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG" \
+      --tag "$DOCKER_IMAGE_NAME:latest" \
+      --push .

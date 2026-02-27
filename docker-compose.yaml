@@ -1,0 +1,27 @@
+services:
+  site:
+    image: yagomaia77/gerador-saudacoes:1.0
+    ports:
+      - "80:80"
+    depends_on:
+      - ms-pessoas-aleatorias
+      - ms-saudacoes-aleatorias
+    networks:
+      - backend
+
+  ms-pessoas-aleatorias:
+    image: yagomaia77/ms-pessoas-aleatorias:1.0
+    ports:
+      - "8000:8000"
+    networks:
+      - backend
+
+  ms-saudacoes-aleatorias:
+    image: yagomaia77/ms-saudacoes-aleatorias:1.0
+    ports:
+      - "8080:8080"
+    networks:
+      - backend
+
+networks:
+  backend: {}

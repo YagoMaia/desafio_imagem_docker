@@ -1,0 +1,19 @@
+# Arquivos do Docker
+Dockerfile
+.dockerignore
+
+# Ambiente virtual e cache do Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+
+# Banco de dados local
+*.db
+
+# Arquivos de configuração de ambiente de desenvolvimento
+.devbox/
+devbox.lock
